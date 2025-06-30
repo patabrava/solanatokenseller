@@ -23,7 +23,8 @@ class TokenSeller {
       averagePrice: 0,
       transactionCount: 0,
       feesPaid: 0,
-      success: false
+      success: false,
+      transactions: []
     };
     
     log.info('Token seller initialized', 'init');
@@ -118,7 +119,6 @@ class TokenSeller {
       
       const walletSummary = await walletService.getWalletSummary();
       
-      // Create wallet info table
       const walletTable = new Table({
         head: [chalk.cyan('Property'), chalk.cyan('Value')],
         style: { head: [], border: [] }
@@ -128,8 +128,8 @@ class TokenSeller {
         ['Wallet Address', walletService.formatAddress(walletSummary.publicKey)],
         ['SOL Balance', `${walletService.formatSolAmount(walletSummary.balanceSol)} SOL`],
         ['Target Token', walletService.formatAddress(CONFIG.TARGET_TOKEN_MINT)],
-        ['Token Status', walletSummary.targetToken.hasToken ? 
-          chalk.green('✅ Available') : chalk.red('❌ Not Found')]
+        ['Token Balance', walletSummary.targetToken.hasToken ? 
+          chalk.green(`✅ ${walletSummary.targetToken.balance.toLocaleString()}`) : chalk.red('❌ Not Found')]
       );
       
       console.log(walletTable.toString());
@@ -155,19 +155,11 @@ class TokenSeller {
     
     const preferences = {};
     
-    // Token amount
     preferences.tokenAmount = this.askTokenAmount();
-    
-    // Output token selection
     preferences.outputToken = this.askOutputToken();
-    
-    // Selling strategy
     preferences.strategy = this.askSellingStrategy();
-    
-    // Maximum slippage
     preferences.maxSlippage = this.askMaxSlippage();
     
-    // Confirmation
     this.confirmPreferences(preferences);
     
     log.info('User preferences collected', 'get_user_preferences', preferences);
@@ -199,18 +191,9 @@ class TokenSeller {
     console.log(chalk.yellow('\n🎯 Output Token'));
     console.log(chalk.gray('Which token would you like to receive?'));
     
-    const choices = [
-      'SOL (Solana)',
-      'USDC (USD Coin)', 
-      'USDT (Tether USD)'
-    ];
-    
-    const index = readlineSync.keyInSelect(choices, 'Select output token:', {
-      cancel: false
-    });
-    
-    const tokenMap = ['SOL', 'USDC', 'USDT'];
-    return tokenMap[index];
+    const choices = Object.keys(CONFIG.OUTPUT_TOKENS);
+    const index = readlineSync.keyInSelect(choices, 'Select output token:', { cancel: false });
+    return choices[index];
   }
   
   /**
@@ -222,14 +205,11 @@ class TokenSeller {
     
     const choices = [
       'Immediate Sale - Execute right now',
-      'Gradual Sale - Split into smaller chunks',
-      'Optimal Timing - Wait for best conditions (4h max)'
+      'Gradual Sale - Split into smaller chunks (not implemented)',
+      'Optimal Timing - Wait for best conditions (not implemented)'
     ];
     
-    const index = readlineSync.keyInSelect(choices, 'Select strategy:', {
-      cancel: false
-    });
-    
+    const index = readlineSync.keyInSelect(choices, 'Select strategy:', { cancel: false });
     const strategyMap = ['immediate', 'gradual', 'optimal'];
     return strategyMap[index];
   }
@@ -247,11 +227,8 @@ class TokenSeller {
       '1.0% - Higher tolerance, better execution probability'
     ];
     
-    const index = readlineSync.keyInSelect(choices, 'Select slippage tolerance:', {
-      cancel: false
-    });
-    
-    const slippageMap = [50, 75, 100]; // basis points
+    const index = readlineSync.keyInSelect(choices, 'Select slippage tolerance:', { cancel: false });
+    const slippageMap = [50, 75, 100];
     return slippageMap[index];
   }
   
@@ -296,7 +273,6 @@ class TokenSeller {
       gradual: 'Gradual Sale',
       optimal: 'Optimal Timing'
     };
-    
     return strategyNames[strategy] || strategy;
   }
   
@@ -312,14 +288,12 @@ class TokenSeller {
       
       console.log(chalk.yellow('🔍 Validating inputs...'));
       
-      // Validate token amount
       await walletService.validateTokenAmount(
         CONFIG.TARGET_TOKEN_MINT, 
         preferences.tokenAmount
       );
       console.log(chalk.green('✅ Token amount validated'));
       
-      // Validate SOL balance for fees
       await walletService.validateSolForFees();
       console.log(chalk.green('✅ SOL balance sufficient for fees'));
       
@@ -345,15 +319,11 @@ class TokenSeller {
       case 'immediate':
         await this.executeImmediateSale(preferences);
         break;
-        
       case 'gradual':
-        await this.executeGradualSale(preferences);
-        break;
-        
       case 'optimal':
-        await this.executeOptimalTiming(preferences);
+        console.log(chalk.blue(`Note: '${preferences.strategy}' strategy falls back to immediate execution for this version.`));
+        await this.executeImmediateSale(preferences);
         break;
-        
       default:
         throw new Error(`Unknown strategy: ${preferences.strategy}`);
     }
@@ -377,10 +347,7 @@ class TokenSeller {
       
       this.displayQuoteInfo(quote, preferences.outputToken);
       
-      // Confirm execution
-      const confirmed = readlineSync.keyInYNStrict(
-        chalk.yellow('\n🎯 Execute this swap?')
-      );
+      const confirmed = readlineSync.keyInYNStrict(chalk.yellow('\n🎯 Execute this swap?'));
       
       if (!confirmed) {
         console.log(chalk.red('❌ Swap cancelled by user'));
@@ -388,7 +355,7 @@ class TokenSeller {
       }
       
       console.log(chalk.yellow('📤 Executing swap...'));
-      const result = await jupiterService.executeSwap(quote);
+      const result = await jupiterService.executeSwap(quote.quoteResponse, true);
       
       this.executionSummary = {
         totalTokensSold: preferences.tokenAmount,
@@ -408,25 +375,7 @@ class TokenSeller {
       throw error;
     }
   }
-  
-  /**
-   * Execute gradual sale strategy (simplified)
-   */
-  async executeGradualSale(preferences) {
-    console.log(chalk.yellow('📈 Gradual sale strategy...'));
-    console.log(chalk.blue('Note: Falling back to immediate execution for this version'));
-    await this.executeImmediateSale(preferences);
-  }
-  
-  /**
-   * Execute optimal timing strategy (simplified)
-   */
-  async executeOptimalTiming(preferences) {
-    console.log(chalk.yellow('⏰ Optimal timing strategy...'));
-    console.log(chalk.blue('Note: Falling back to immediate execution for this version'));
-    await this.executeImmediateSale(preferences);
-  }
-  
+
   /**
    * Display quote information
    */
@@ -437,8 +386,8 @@ class TokenSeller {
     });
     
     quoteTable.push(
-      ['Input Amount', quote.inAmount.toLocaleString()],
-      ['Output Amount', `${quote.outAmount.toLocaleString()} ${outputToken}`],
+      ['Input Amount', parseInt(quote.inAmount).toLocaleString()],
+      ['Est. Output', `${parseInt(quote.outAmount).toLocaleString()} ${outputToken}`],
       ['Price Impact', `${quote.priceImpactPct}%`],
       ['Route Length', quote.routeLength],
       ['Slippage', `${quote.slippageBps / 100}%`]
@@ -468,7 +417,7 @@ class TokenSeller {
     summaryTable.push(
       ['Status', this.executionSummary.success ? chalk.green('✅ SUCCESS') : chalk.red('❌ FAILED')],
       ['Tokens Sold', this.executionSummary.totalTokensSold.toLocaleString()],
-      ['Total Received', this.executionSummary.totalReceived.toLocaleString()],
+      ['Total Received', `${this.executionSummary.totalReceived.toLocaleString()} ${this.executionSummary.transactions[0]?.quoteResponse?.outputMint}`],
       ['Average Price', this.executionSummary.averagePrice.toFixed(8)],
       ['Transactions', this.executionSummary.transactionCount],
       ['Fees Paid', `${this.executionSummary.feesPaid} SOL`],
@@ -477,7 +426,7 @@ class TokenSeller {
     
     console.log(summaryTable.toString());
     
-    if (this.executionSummary.transactions) {
+    if (this.executionSummary.transactions && this.executionSummary.transactions.length > 0) {
       console.log(chalk.gray('\n🔗 Transaction IDs:'));
       this.executionSummary.transactions.forEach((tx, i) => {
         console.log(chalk.blue(`  ${i + 1}. ${tx.transactionId}`));
@@ -537,4 +486,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { TokenSeller }; 
+module.exports = { TokenSeller };

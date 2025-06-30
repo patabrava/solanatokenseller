@@ -31,7 +31,7 @@ class WalletService {
         forceRefresh
       });
       
-      const response = await apiClient.get(`/wallets/mother/${CONFIG.WALLET_PUBLIC_KEY}`);
+      const response = await apiClient.get(`wallets/mother/${CONFIG.WALLET_PUBLIC_KEY}`);
       
       if (!response.publicKey) {
         throw new Error('Invalid response format: missing publicKey');
@@ -102,7 +102,7 @@ class WalletService {
       const balance = await this.getSolBalance(true); // Force refresh for fee validation
       
       if (balance < estimatedFeeSol) {
-        const error = new Error(`Insufficient SOL balance for transaction fees. Required: ${estimatedFeeSol} SOL, Available: ${balance} SOL`);
+        const error = new Error(`Insufficient SOL balance for transaction fees. Required: ~${estimatedFeeSol} SOL, Available: ${balance} SOL`);
         log.error('Insufficient SOL for fees', 'validate_sol_fees', error, {
           requiredSol: estimatedFeeSol,
           availableSol: balance,
@@ -129,57 +129,44 @@ class WalletService {
   }
   
   /**
-   * Check if wallet holds specific token (simplified check)
-   * Note: This is a basic implementation. In production, you'd want to
-   * query the actual token accounts to get precise token balances.
+   * Check if wallet holds a specific token and its balance.
    */
-  async checkTokenHolding(tokenMint, expectedAmount = null) {
+  async checkTokenHolding(tokenMint) {
     try {
       log.info('Checking token holding', 'check_token_holding', {
-        tokenMint,
-        expectedAmount
-      });
-      
-      // For now, we'll assume the wallet has tokens since we don't have
-      // a specific endpoint to check token balances
-      // In production, you'd implement actual token balance checking
-      
-      if (tokenMint === CONFIG.TARGET_TOKEN_MINT) {
-        // Assume we have tokens for the target mint
-        log.info('Token holding confirmed', 'check_token_holding', {
-          tokenMint,
-          status: 'assumed_available'
-        });
-        
-        return {
-          hasToken: true,
-          balance: 'unknown', // Would be actual balance in production
-          mint: tokenMint
-        };
-      }
-      
-      // For other tokens, we'd need to implement actual checking
-      log.warn('Token holding check not implemented for mint', 'check_token_holding', {
         tokenMint
       });
       
+      const balanceData = await apiClient.getTokenBalance(CONFIG.WALLET_PUBLIC_KEY, tokenMint);
+
+      const balance = balanceData.balance || 0;
+      const decimals = balanceData.decimals || 0;
+      const adjustedBalance = balance / Math.pow(10, decimals);
+
+      log.info('Token holding check complete', 'check_token_holding', {
+        tokenMint,
+        hasToken: adjustedBalance > 0,
+        balance: adjustedBalance,
+        rawBalance: balance,
+        decimals: decimals
+      });
+
       return {
-        hasToken: false,
-        balance: 0,
-        mint: tokenMint
+          hasToken: adjustedBalance > 0,
+          balance: adjustedBalance,
+          mint: tokenMint
       };
       
     } catch (error) {
       log.error('Failed to check token holding', 'check_token_holding', error, {
-        tokenMint,
-        expectedAmount
+        tokenMint
       });
       throw new Error(`Failed to check token holding: ${error.message}`);
     }
   }
   
   /**
-   * Validate token amount for selling
+   * Validate token amount for selling against actual balance.
    */
   async validateTokenAmount(tokenMint, amount) {
     try {
@@ -188,22 +175,20 @@ class WalletService {
         amount
       });
       
-      // Check if amount is positive
       if (amount <= 0) {
         throw new Error('Token amount must be positive');
       }
       
-      // Check if wallet holds the token
-      const tokenHolding = await this.checkTokenHolding(tokenMint, amount);
+      const tokenHolding = await this.checkTokenHolding(tokenMint);
       
-      if (!tokenHolding.hasToken) {
-        throw new Error(`Wallet does not hold token: ${tokenMint}`);
+      if (!tokenHolding.hasToken || tokenHolding.balance < amount) {
+        throw new Error(`Insufficient token balance. Required: ${amount}, Available: ${tokenHolding.balance}`);
       }
       
-      // In production, you'd compare against actual balance
       log.info('Token amount validation passed', 'validate_token_amount', {
         tokenMint,
         amount,
+        availableBalance: tokenHolding.balance,
         validation: 'passed'
       });
       
@@ -273,4 +258,4 @@ const walletService = new WalletService();
 module.exports = {
   WalletService,
   walletService
-}; 
+};

@@ -168,7 +168,7 @@ class ApiClient {
     }
     
     // Timeout errors
-    if (error.code === 'ECONNABORTED') {
+    if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
       return true;
     }
     
@@ -190,9 +190,10 @@ class ApiClient {
       const status = error.response.status;
       const url = error.config?.url || 'unknown';
       const baseURL = error.config?.baseURL || 'unknown';
+      const responseData = error.response.data?.message || error.response.statusText;
       
       if (status === 404) {
-        return new Error(`HTTP 404: Endpoint not found. Check API configuration.\nFull URL: ${baseURL}${url}\nResponse: ${error.response.data?.message || error.response.statusText}`);
+        return new Error(`HTTP 404: Endpoint not found. Check API configuration.\nFull URL: ${baseURL}${url}\nResponse: ${responseData}`);
       }
       
       if (status === 502) {
@@ -200,10 +201,10 @@ class ApiClient {
       }
       
       if (status === 500) {
-        return new Error(`HTTP 500: Internal Server Error. ${error.response.data?.message || error.response.statusText}. Check request parameters and API server logs.`);
+        return new Error(`HTTP 500: Internal Server Error. ${responseData}. Check request parameters and API server logs.`);
       }
       
-      return new Error(`HTTP ${status}: ${error.response.data?.message || error.response.statusText}`);
+      return new Error(`HTTP ${status}: ${responseData}`);
     } else if (error.request) {
       // Network error
       if (error.code === 'ETIMEDOUT') {
@@ -223,31 +224,21 @@ class ApiClient {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
   
-  // Convenience methods for different HTTP verbs
+    // Convenience methods for different HTTP verbs
   async get(endpoint, customRetries = null) {
-    // PHASE 3: Enhanced logging for GET requests with query parameters
-    const fullUrl = `${this.baseURL}${endpoint}`;
-    
-    log.info('GET request details', 'get', {
-      endpoint,
-      fullUrl,
-      hasQueryParams: endpoint.includes('?'),
-      method: 'GET'
-    });
-    
-    return await this.executeRequest('get', endpoint, null, customRetries);
+    return this.executeRequest('get', endpoint, null, customRetries);
   }
-  
+
   async post(endpoint, data, customRetries = null) {
-    return await this.executeRequest('post', endpoint, data, customRetries);
+    return this.executeRequest('post', endpoint, data, customRetries);
   }
-  
+
   async put(endpoint, data, customRetries = null) {
-    return await this.executeRequest('put', endpoint, data, customRetries);
+    return this.executeRequest('put', endpoint, data, customRetries);
   }
-  
+
   async delete(endpoint, customRetries = null) {
-    return await this.executeRequest('delete', endpoint, null, customRetries);
+    return this.executeRequest('delete', endpoint, null, customRetries);
   }
   
   /**
@@ -256,12 +247,32 @@ class ApiClient {
   async healthCheck() {
     try {
       log.info('Performing API health check', 'health_check');
-      const response = await this.get('/jupiter/tokens', 1); // Single retry for health check
+      const response = await this.get('jupiter/tokens', 1); // Single retry for health check
       log.info('API health check successful', 'health_check', response);
       return true;
     } catch (error) {
       log.error('API health check failed', 'health_check', error);
       return false;
+    }
+  }
+
+  /**
+   * Get SPL token balance for a specific wallet and token mint.
+   */
+  async getTokenBalance(walletAddress, mintAddress) {
+    try {
+        const endpoint = `wallets/token-balance/${walletAddress}?mintAddress=${mintAddress}`;
+        const response = await this.get(endpoint);
+        
+        if (response && response.data) {
+            return response.data;
+        } else {
+            throw new Error("Invalid response format for token balance");
+        }
+    } catch (error) {
+        log.error('Failed to get token balance', 'getTokenBalance', error, { walletAddress, mintAddress });
+        // Return a default structure on failure to prevent crashes downstream
+        return { balance: 0, decimals: 6, error: error.message };
     }
   }
 }
@@ -272,4 +283,4 @@ const apiClient = new ApiClient();
 module.exports = {
   ApiClient,
   apiClient
-}; 
+};

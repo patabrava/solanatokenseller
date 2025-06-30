@@ -55,6 +55,9 @@ private-keys.txt
 *.pem
 *.key
 
+# Configuration files with sensitive data
+src/config/constants.js
+
 # ══════════════════════════════════════════════════════════════
 # Development Tools (Observable Implementation)
 # IDE and editor specific files

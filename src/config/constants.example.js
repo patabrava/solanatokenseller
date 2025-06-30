@@ -1,10 +1,10 @@
 const CONFIG = {
   // Target token configuration
-  TARGET_TOKEN_MINT: 'CHiNsA2B6ZbmKnEmHPCbbX9aXJyoJzAtcLpHEDd6Qyq3',
+  TARGET_TOKEN_MINT: 'YOUR_TARGET_TOKEN_MINT_ADDRESS_HERE',
   
   // Wallet configuration
-  WALLET_PRIVATE_KEY: '4o7cau3adda9iCJtsbPQprV1dmKisEESoiwQRCV3i2njQATEF8vhHTix53zhEkKmWXFe9nUXMf981bpU6GCy4myo',
-  WALLET_PUBLIC_KEY: '6GPLxM3NwTaKxVCzQPLsqgGSfyyWTfGg1f33WasptJ4m',
+  WALLET_PRIVATE_KEY: 'YOUR_WALLET_PRIVATE_KEY_HERE',
+  WALLET_PUBLIC_KEY: 'YOUR_WALLET_PUBLIC_KEY_HERE',
   
   // API configuration
   API_BASE_URL: 'https://solanaapivolume.onrender.com/api',
@@ -57,8 +57,8 @@ const validateConfig = () => {
   ];
   
   for (const field of requiredFields) {
-    if (!CONFIG[field]) {
-      throw new Error(`Missing required configuration: ${field}`);
+    if (!CONFIG[field] || CONFIG[field].includes('YOUR_')) {
+      throw new Error(`Missing or placeholder value for required configuration: ${field}`);
     }
   }
   

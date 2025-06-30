@@ -51,7 +51,7 @@ class ApiValidator {
       log.info('Testing basic API connectivity', 'test_connectivity');
       
       // Try the tokens endpoint as our connectivity test
-      const response = await apiClient.get('/jupiter/tokens', 1);
+      const response = await apiClient.get('jupiter/tokens', 1);
       
       if (response && response.tokens) {
         results.passed.push('✅ Basic API connectivity - SUCCESS');
@@ -82,7 +82,7 @@ class ApiValidator {
     try {
       log.info('Testing Jupiter tokens endpoint', 'test_jupiter_tokens');
       
-      const response = await apiClient.get('/jupiter/tokens');
+      const response = await apiClient.get('jupiter/tokens');
       
       if (response && response.tokens) {
         const tokenCount = Object.keys(response.tokens).length;
@@ -124,7 +124,7 @@ class ApiValidator {
         slippageBps: 50
       };
       
-      const response = await apiClient.post('/jupiter/quote', quoteRequest);
+      const response = await apiClient.post('jupiter/quote', quoteRequest);
       
       if (response && response.quoteResponse) {
         results.passed.push('✅ Jupiter quote endpoint - SUCCESS');
@@ -188,7 +188,7 @@ class ApiValidator {
    */
   async quickValidation() {
     try {
-      const response = await apiClient.get('/jupiter/tokens', 1);
+      const response = await apiClient.get('jupiter/tokens', 1);
       return response && response.tokens;
     } catch (error) {
       return false;
